@@ -1,0 +1,40 @@
+Device: cuda
+
+==================================================
+Step 1: Training expert (CartPole, 50k steps)...
+Expert performance: 500.0 ± 0.0
+✓ Expert OK
+
+==================================================
+Step 2: Collecting demonstrations (20 episodes)...
+  Collected 10/20 episodes | avg return: 500.0
+  Collected 20/20 episodes | avg return: 500.0
+
+Dataset: 10000 transitions, mean return: 500.0 ± 0.0
+Dataset: 10000 transitions
+✓ Demo collection OK
+
+==================================================
+Step 3: Behavioral cloning (10 epochs)...
+Epoch   5/10 | train loss: 0.3027 acc: 0.837 | val loss: 0.2863 acc: 0.859
+Epoch  10/10 | train loss: 0.1629 acc: 0.946 | val loss: 0.1584 acc: 0.964
+
+BC training done. Best val loss: 0.1584
+Final val accuracy: 0.964
+✓ BC OK
+
+==================================================
+Step 4: REINFORCE fine-tuning (100 episodes)...
+Episode    50/100 | train return:   500.0 | eval: 500.0 ± 0.0
+Episode   100/100 | train return:   500.0 | eval: 500.0 ± 0.0
+Eval at episode 100: 500.0
+✓ REINFORCE OK
+
+==================================================
+Step 5: Final evaluation...
+Mean return: 500.0 ± 0.0
+✓ Evaluation OK
+
+==================================================
+All checks passed! Pipeline is working correctly.
+Ready to run on LunarLander-v2 with full hyperparameters.

@@ -38,7 +38,8 @@ class PolicyNetwork(nn.Module):
 
     def act(self, obs: np.ndarray, deterministic: bool = False) -> int:
         """Select action given a numpy observation."""
-        obs_t = torch.FloatTensor(obs).unsqueeze(0)
+        device = next(self.parameters()).device
+        obs_t = torch.FloatTensor(obs).unsqueeze(0).to(device)
         with torch.no_grad():
             dist = self.get_distribution(obs_t)
             action = dist.probs.argmax(dim=-1) if deterministic else dist.sample()
@@ -87,7 +88,8 @@ class ActorCriticNetwork(nn.Module):
         return Categorical(logits=logits)
 
     def act(self, obs: np.ndarray, deterministic: bool = False) -> int:
-        obs_t = torch.FloatTensor(obs).unsqueeze(0)
+        device = next(self.parameters()).device
+        obs_t = torch.FloatTensor(obs).unsqueeze(0).to(device)
         with torch.no_grad():
             dist = self.get_distribution(obs_t)
             action = dist.probs.argmax(dim=-1) if deterministic else dist.sample()
