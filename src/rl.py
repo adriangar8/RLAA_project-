@@ -80,7 +80,7 @@ class Rollout:
 
 @dataclass
 class REINFORCEConfig:
-    env_id: str = "LunarLander-v2"
+    env_id: str = "LunarLander-v3"
     n_episodes: int = 2000          # training episodes
     gamma: float = 0.99
     actor_lr: float = 3e-4
@@ -232,7 +232,7 @@ class REINFORCETrainer:
 
 @dataclass
 class A2CConfig:
-    env_id: str = "LunarLander-v2"
+    env_id: str = "LunarLander-v3"
     total_steps: int = 1_000_000
     n_steps: int = 5               # steps per update (online TD)
     gamma: float = 0.99

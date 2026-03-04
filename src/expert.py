@@ -22,7 +22,7 @@ from stable_baselines3.common.evaluation import evaluate_policy
 
 @dataclass
 class ExpertConfig:
-    env_id: str = "LunarLander-v2"
+    env_id: str = "LunarLander-v3"
     total_timesteps: int = 500_000
     n_envs: int = 4
     save_dir: str = "checkpoints/expert"
