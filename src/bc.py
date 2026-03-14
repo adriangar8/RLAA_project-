@@ -43,6 +43,7 @@ class BCConfig:
     val_fraction: float = 0.1
     weight_decay: float = 1e-4
     patience: int = 10             # early stopping
+    noise_std: float = 0.0         # Gaussian noise on obs during training (data augmentation)
     save_dir: str = "checkpoints/bc"
     device: str = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -86,6 +87,9 @@ class BehavioralCloning:
             for obs, actions in train_loader:
                 obs = obs.to(cfg.device)
                 actions = actions.to(cfg.device)
+
+                if cfg.noise_std > 0:
+                    obs = obs + torch.randn_like(obs) * cfg.noise_std
 
                 logits = self.policy(obs)
                 loss = self.loss_fn(logits, actions)
