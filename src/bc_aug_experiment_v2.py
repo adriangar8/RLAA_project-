@@ -44,8 +44,8 @@ DEMO_PATH = "data/demonstrations_200ep.npz"
 OBS_DIM = 8
 ACT_DIM = 4
 N_DEMOS = 500
-N_SEEDS = 10
-NOISE_STDS = [0.0, 0.01, 0.05, 0.1, 0.2]
+N_SEEDS = 5
+NOISE_STDS = [0.0, 0.05, 0.1, 0.2]
 REINFORCE_EPISODES = 5000
 PPO_TIMESTEPS = 100_000
 PPO_EVAL_FREQ = 10_000
@@ -59,6 +59,9 @@ DEVICE = (
 
 # Allow quick test mode via command line: python -m src.bc_aug_experiment_v2 --test
 TEST_MODE = "--test" in sys.argv
+RESUME = "--resume" in sys.argv
+PARTIAL_SAVE = "results/bc_aug_v2_partial.npy"
+
 if TEST_MODE:
     N_SEEDS = 1
     NOISE_STDS = [0.0, 0.1]
@@ -152,36 +155,21 @@ def run_ppo(bc_policy: PolicyNetwork, seed: int) -> dict:
 
     transfer_bc_weights_to_ppo(bc_policy, ppo_model)
 
-    # Collect eval metrics at regular intervals via callback
     eval_results = {"eval_at": [], "eval_mean": [], "eval_std": []}
-
-    class EvalMetricsCallback(EvalCallback):
-        def _on_step(self) -> bool:
-            result = super()._on_step()
-            if self.last_mean_reward is not None and len(eval_results["eval_at"]) < self.n_calls // self.eval_freq:
-                eval_results["eval_at"].append(self.n_calls)
-                eval_results["eval_mean"].append(self.last_mean_reward)
-                eval_results["eval_std"].append(
-                    float(np.std(self.evaluations_results[-1])) if self.evaluations_results else 0.0
-                )
-            return result
 
     eval_callback = EvalCallback(
         eval_env,
         eval_freq=PPO_EVAL_FREQ,
         n_eval_episodes=20,
+        log_path="/tmp/ppo_eval_log",
         verbose=0,
     )
 
     ppo_model.learn(total_timesteps=PPO_TIMESTEPS, callback=eval_callback)
 
     # Extract eval results from the callback
-    if hasattr(eval_callback, "evaluations_results") and eval_callback.evaluations_results:
-        eval_results["eval_at"] = list(range(
-            PPO_EVAL_FREQ,
-            PPO_EVAL_FREQ * (len(eval_callback.evaluations_results) + 1),
-            PPO_EVAL_FREQ,
-        ))[:len(eval_callback.evaluations_results)]
+    if eval_callback.evaluations_results:
+        eval_results["eval_at"] = [int(t) for t in eval_callback.evaluations_timesteps]
         eval_results["eval_mean"] = [float(np.mean(r)) for r in eval_callback.evaluations_results]
         eval_results["eval_std"] = [float(np.std(r)) for r in eval_callback.evaluations_results]
 
@@ -214,19 +202,30 @@ print("Loading demonstrations...")
 full_demo = DemonstrationDataset.load(DEMO_PATH)
 print(f"  Full pool: {len(full_demo.observations)} transitions\n")
 
-# Initialize results structure
-results = {}
-for sigma in NOISE_STDS:
-    key = f"sigma_{sigma}"
-    results[key] = {
-        "noise_std": sigma,
-        "bc_mean": [], "bc_std": [],
-        "shift": [],
-        "reinforce_curves": [], "reinforce_final_mean": [], "reinforce_final_std": [],
-        "ppo_curves": [], "ppo_final_mean": [], "ppo_final_std": [],
-        "reinforce_eval_at": None,
-        "ppo_eval_at": None,
-    }
+# Initialize (or resume) results structure
+def _blank_results():
+    r = {}
+    for sigma in NOISE_STDS:
+        key = f"sigma_{sigma}"
+        r[key] = {
+            "noise_std": sigma,
+            "bc_mean": [], "bc_std": [],
+            "shift": [],
+            "reinforce_curves": [], "reinforce_final_mean": [], "reinforce_final_std": [],
+            "ppo_curves": [], "ppo_final_mean": [], "ppo_final_std": [],
+            "reinforce_eval_at": None,
+            "ppo_eval_at": None,
+        }
+    return r
+
+if RESUME and os.path.exists(PARTIAL_SAVE):
+    print(f"Resuming from {PARTIAL_SAVE}...")
+    results = np.load(PARTIAL_SAVE, allow_pickle=True).item()
+    completed_pairs: set = results.pop("_completed", set())
+    print(f"  Already completed {len(completed_pairs)} (seed, sigma) pairs.\n")
+else:
+    results = _blank_results()
+    completed_pairs = set()
 
 for seed in range(N_SEEDS):
     print(f"\n{'='*60}")
@@ -238,6 +237,10 @@ for seed in range(N_SEEDS):
 
     for sigma in NOISE_STDS:
         key = f"sigma_{sigma}"
+        pair_id = f"{seed}_{sigma}"
+        if pair_id in completed_pairs:
+            print(f"\n  [σ={sigma}] Seed {seed+1} already done — skipping.")
+            continue
         print(f"\n  [σ={sigma}] Training BC...")
         policy = train_bc(demo, noise_std=sigma, seed=seed)
 
@@ -287,6 +290,13 @@ for seed in range(N_SEEDS):
         results[key]["ppo_final_mean"].append(ppo_final)
         results[key]["ppo_final_std"].append(ppo_final_std)
         print(f"  [σ={sigma}] PPO final: {ppo_final:.1f} ± {ppo_final_std:.1f}")
+
+        # Incremental checkpoint — survives system interruptions
+        completed_pairs.add(pair_id)
+        results["_completed"] = completed_pairs
+        np.save(PARTIAL_SAVE, results)  # pyright: ignore[reportArgumentType]
+        results.pop("_completed")
+        print(f"  [checkpoint] Saved partial results → {PARTIAL_SAVE}")
 
 
 # -------------------------------------------------------
