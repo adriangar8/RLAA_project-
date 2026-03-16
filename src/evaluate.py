@@ -11,6 +11,7 @@ import numpy as np
 import gymnasium as gym
 import torch
 import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
 import matplotlib.ticker as ticker
 import seaborn as sns
 from scipy.ndimage import uniform_filter1d
@@ -131,6 +132,59 @@ def measure_covariate_shift(
         "agent_obs": A,
         "n_agent_transitions": len(agent_obs),
     }
+
+
+# ---------------------------------------------------------------------------
+# State visitation heatmap
+# ---------------------------------------------------------------------------
+
+def plot_state_visitation_heatmap(
+    obs_dict: dict,
+    save_path: Optional[str] = None,
+    title: str = "State Visitation: Covariate Shift",
+):
+    """
+    Plot 2D KDE heatmaps of state visitation across multiple policies.
+
+    Uses obs[:,0] (X position) and obs[:,1] (Y position), which are the
+    first two dimensions of the LunarLander observation vector.
+
+    Args:
+        obs_dict: mapping of {label: obs_array (N, obs_dim)} for each policy.
+                  Pass the 'expert_obs' and 'agent_obs' values returned by
+                  measure_covariate_shift(), plus any additional policies.
+        save_path: optional path to save the figure.
+        title: figure title.
+    """
+    cmaps = ["Blues", "Reds", "Greens", "Purples", "Oranges"]
+    fig, ax = plt.subplots(figsize=(8, 6))
+    handles = []
+
+    for i, (label, obs) in enumerate(obs_dict.items()):
+        cmap = cmaps[i % len(cmaps)]
+        sns.kdeplot(
+            x=obs[:, 0], y=obs[:, 1],
+            ax=ax,
+            cmap=cmap,
+            fill=True,
+            alpha=0.5,
+        )
+        # sns.kdeplot with fill=True doesn't register labels on matplotlib
+        # artists, so build proxy Patch handles for the legend manually.
+        proxy_color = plt.get_cmap(cmap)(0.6)
+        handles.append(mpatches.Patch(color=proxy_color, alpha=0.6, label=label))
+
+    ax.set_xlabel("X Position (obs[0])", fontsize=12)
+    ax.set_ylabel("Y Position (obs[1])", fontsize=12)
+    ax.set_title(title, fontsize=13)
+    ax.legend(handles=handles, fontsize=10)
+    plt.tight_layout()
+
+    if save_path:
+        plt.savefig(save_path, dpi=150, bbox_inches="tight")
+        print(f"Saved: {save_path}")
+    plt.show()
+    return fig
 
 
 # ---------------------------------------------------------------------------

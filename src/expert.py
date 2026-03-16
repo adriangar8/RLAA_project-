@@ -112,13 +112,19 @@ def collect_demonstrations(
     n_episodes: int,
     deterministic: bool = True,
     render: bool = False,
+    action_noise_eps: float = 0.0,
 ) -> DemonstrationDataset:
     """
     Roll out the expert policy and collect (obs, action) pairs.
 
     Args:
         n_episodes: number of complete episodes to collect
-        deterministic: if False, adds stochasticity (for noisy expert ablation)
+        deterministic: if False, adds SB3's built-in stochasticity
+        action_noise_eps: epsilon-greedy action noise probability.
+            With this probability the recorded action is replaced by a
+            random one, forcing the expert to visit slightly off-trajectory
+            states and demonstrate recovery, a direct attack on covariate
+            shift.  Only makes sense for discrete action spaces.
     """
     env = gym.make(env_id, render_mode="human" if render else None)
 
@@ -131,9 +137,14 @@ def collect_demonstrations(
         done = False
 
         while not done:
-            action, _ = expert.predict(obs, deterministic=deterministic)
+            optimal_action, _ = expert.predict(obs, deterministic=deterministic)
+            if action_noise_eps > 0.0 and np.random.rand() < action_noise_eps:
+                action = env.action_space.sample()
+            else:
+                action = optimal_action
+
             ep_obs.append(obs)
-            ep_actions.append(int(action))
+            ep_actions.append(int(optimal_action))
             obs, reward, terminated, truncated, _ = env.step(action)
             ep_return += reward
             done = terminated or truncated

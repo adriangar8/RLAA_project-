@@ -86,6 +86,7 @@ class REINFORCEConfig:
     actor_lr: float = 3e-4
     critic_lr: float = 1e-3
     entropy_coef: float = 0.01      # entropy bonus to prevent premature convergence
+    kl_coef: float = 0.0            # KL penalty coefficient
     max_grad_norm: float = 1.0
     eval_freq: int = 50             # evaluate every N episodes
     eval_episodes: int = 20
@@ -107,6 +108,12 @@ class REINFORCETrainer:
         obs_dim = gym.make(cfg.env_id).observation_space.shape[0]
         self.value_net = ValueNetwork(obs_dim).to(cfg.device)
 
+        if self.cfg.kl_coef > 0.0:
+            import copy
+            self.ref_policy = copy.deepcopy(policy).to(cfg.device)
+            for param in self.ref_policy.parameters():
+                param.requires_grad = False
+
         self.actor_opt = optim.Adam(policy.parameters(), lr=cfg.actor_lr)
         self.critic_opt = optim.Adam(self.value_net.parameters(), lr=cfg.critic_lr)
 
@@ -126,7 +133,7 @@ class REINFORCETrainer:
             rollout = self._collect_episode(env)
             returns = rollout.compute_returns(cfg.gamma, normalize=True)
 
-            obs_t = torch.FloatTensor(rollout.observations).to(cfg.device)
+            obs_t = torch.FloatTensor(np.array(rollout.observations)).to(cfg.device)
             actions_t = torch.LongTensor(rollout.actions).to(cfg.device)
             log_probs_t = torch.stack(rollout.log_probs).to(cfg.device)
 
@@ -147,7 +154,16 @@ class REINFORCETrainer:
 
             actor_loss = -(log_probs_new * advantages).mean()
             entropy_loss = -cfg.entropy_coef * entropy.mean()
-            total_actor_loss = actor_loss + entropy_loss
+            
+            kl_loss = 0.0
+            if cfg.kl_coef > 0.0:
+                with torch.no_grad():
+                    ref_dist = self.ref_policy.get_distribution(obs_t)
+                dist = self.policy.get_distribution(obs_t)
+                kl_div = torch.distributions.kl.kl_divergence(dist, ref_dist).mean()
+                kl_loss = cfg.kl_coef * kl_div
+
+            total_actor_loss = actor_loss + entropy_loss + kl_loss
 
             self.actor_opt.zero_grad()
             total_actor_loss.backward()

@@ -58,7 +58,7 @@ class BehavioralCloning:
         self.loss_fn = nn.CrossEntropyLoss()
         Path(cfg.save_dir).mkdir(parents=True, exist_ok=True)
 
-    def train(self, demo: DemonstrationDataset) -> dict:
+    def train(self, demo: DemonstrationDataset, save_as: str = "best_bc.pt") -> dict:
         """
         Train policy via BC on demonstrations.
         Returns training history dict with train/val loss per epoch.
@@ -125,7 +125,7 @@ class BehavioralCloning:
             if val_loss < best_val_loss:
                 best_val_loss = val_loss
                 patience_counter = 0
-                self.save("best_bc.pt")
+                self.save(save_as)
             else:
                 patience_counter += 1
                 if patience_counter >= cfg.patience:
@@ -133,7 +133,7 @@ class BehavioralCloning:
                     break
 
         # Restore best
-        self.load("best_bc.pt")
+        self.load(save_as)
         print(f"\nBC training done. Best val loss: {best_val_loss:.4f}")
         return history
 
